@@ -1,0 +1,82 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: cicd-pipeline-complex-dag-
+spec:
+  entrypoint: main
+  templates:
+  - name: main
+    dag:
+      tasks:
+      - name: build
+        template: build-task
+      - name: test
+        template: test-task
+        dependencies: [build]
+      - name: scan
+        template: scan-task
+        dependencies: [test]
+        when: "{{tasks.test.status}} == Succeeded"
+      - name: lint
+        template: lint-task
+        dependencies: [test]
+        when: "{{tasks.test.status}} == Succeeded"
+      - name: deploy
+        template: deploy-task
+        dependencies: [scan, lint]
+      - name: failure-notification
+        template: failure-notification-task
+        dependencies: [test]
+        when: "{{tasks.test.status}} == Failed"
+
+  - name: build-task
+    nodeSelector:
+      hardware: cpu
+    container:
+      image: golang:1.22
+      command: ["sh", "-c"]
+      args: ["echo 'Building application...'; sleep 5; echo 'Build complete!'"]
+
+  - name: test-task
+    inputs:
+      parameters:
+      - name: test_mode
+        value: "unit"
+    nodeSelector:
+      hardware: cpu
+    container:
+      image: python:3.12
+      command: ["sh", "-c"]
+      args: ["pip install pytest && python -c 'if \"{{inputs.parameters.test_mode}}\" == \"fail\": raise Exception(\"Test failed\"); print(\"Running {{inputs.parameters.test_mode}} tests... Success!\")'"]
+
+  - name: scan-task
+    nodeSelector:
+      hardware: cpu
+    container:
+      image: aquasec/trivy:latest
+      command: ["sh", "-c"]
+      args: ["echo 'Scanning for vulnerabilities... No issues found!'"]
+
+  - name: lint-task
+    nodeSelector:
+      hardware: cpu
+    container:
+      image: golangci/golangci-lint:latest
+      command: ["sh", "-c"]
+      args: ["echo 'Linting code... All good!'"]
+
+  - name: deploy-task
+    nodeSelector:
+      hardware: cpu
+    container:
+      image: busybox:latest
+      command: ["sh", "-c"]
+      args: ["echo 'Deploying to production... Done!'"]
+
+  - name: failure-notification-task
+    nodeSelector:
+      hardware: cpu
+    container:
+      image: busybox:latest
+      command: ["sh", "-c"]
+      args: ["echo 'Test failed! Sending notification to team...'"]

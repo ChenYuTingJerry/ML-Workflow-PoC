@@ -1,0 +1,57 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: cicd-pipeline-dag-
+spec:
+  entrypoint: main
+  templates:
+  - name: main
+    dag:
+      tasks:
+      - name: build
+        template: build-task
+      - name: test
+        template: test-task
+        dependencies: [build]
+      - name: scan
+        template: scan-task
+        dependencies: [test]
+      - name: deploy
+        template: deploy-task
+        dependencies: [scan]
+
+  - name: build-task
+    nodeSelector:
+      hardware: cpu
+    container:
+      image: golang:1.22
+      command: ["sh", "-c"]
+      args: ["echo 'Building application...'; sleep 5; echo 'Build complete!'"]
+
+  - name: test-task
+    inputs:
+      parameters:
+      - name: test_mode
+        value: "unit"
+    nodeSelector:
+      hardware: cpu
+    container:
+      image: python:3.12
+      command: ["sh", "-c"]
+      args: ["pip install pytest && python -c 'print(\"Running {{inputs.parameters.test_mode}} tests... Success!\")'"]
+
+  - name: scan-task
+    nodeSelector:
+      hardware: cpu
+    container:
+      image: aquasec/trivy:latest
+      command: ["sh", "-c"]
+      args: ["echo 'Scanning for vulnerabilities... No issues found!'"]
+
+  - name: deploy-task
+    nodeSelector:
+      hardware: cpu
+    container:
+      image: busybox:latest
+      command: ["sh", "-c"]
+      args: ["echo 'Deploying to production... Done!'"]
